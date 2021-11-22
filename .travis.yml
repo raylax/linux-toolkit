@@ -3,7 +3,10 @@ language: go
 deploy:
   provider: releases
   api_key: $GH_TOKEN
-  skip_cleanup: true
-  file: ltk*
+  file:
+    - ltk
+    - ltk_amd64
+    - ltk_arm
+    - ltk_arm64
   on:
     tags: true
