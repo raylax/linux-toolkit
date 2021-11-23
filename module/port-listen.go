@@ -79,13 +79,29 @@ func (r records) Len() int {
 }
 
 func (r records) Less(i, j int) bool {
-	return r[i].localAddress.port > r[j].localAddress.port
+	return r[i].localAddress.port < r[j].localAddress.port
 }
 
 func (r records) Swap(i, j int) {
 	tmp := r[i]
 	r[i] = r[j]
 	r[j] = tmp
+}
+
+type uint32s []uint32
+
+func (u uint32s) Len() int {
+	return len(u)
+}
+
+func (u uint32s) Less(i, j int) bool {
+	return u[i] < u[j]
+}
+
+func (u uint32s) Swap(i, j int) {
+	tmp := u[i]
+	u[i] = u[j]
+	u[j] = tmp
 }
 
 func (r record) text() string {
@@ -103,6 +119,7 @@ func PrintPortListen() {
 	portsMap := make(map[uint32]records)
 	scanner := bufio.NewScanner(file)
 	scanner.Scan()
+
 	for scanner.Scan() {
 		r := parseRecord(scanner.Text())
 		if r.state != sListen {
@@ -115,7 +132,15 @@ func PrintPortListen() {
 		}
 		portsMap[pid] = append(ports, r)
 	}
-	for k, ports := range portsMap {
+	pids := make(uint32s, len(portsMap))
+	i := 0
+	for k := range portsMap {
+		pids[i] = k
+		i++
+	}
+	sort.Sort(pids)
+	for _, k := range pids {
+		ports := portsMap[k]
 		cmd := getCmdline(k)
 		sort.Sort(&ports)
 		println(fmt.Sprintf("%s#%d", cmd, k))
