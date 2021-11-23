@@ -209,8 +209,12 @@ func getCmdline(pid uint32) string {
 		if i > 0 {
 			c = "└─ "
 		}
+		r := i - 1
+		if r < 0 {
+			r = 0
+		}
 		cmdlineTexts[i] = fmt.Sprintf("%s%s%s%s%s%s#%d%s",
-			strings.Repeat("  ", i),
+			strings.Repeat("   ", r),
 			colorGreen, c, cmdline.text, colorReset,
 			colorYellow, cmdline.pid, colorReset)
 	}
