@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -69,8 +70,15 @@ type record struct {
 	remoteAddress address
 	state         state
 	uid           uint32
-	inode uint32
+	inode         uint32
 }
+
+type cmdline struct {
+	pid  uint32
+	text string
+}
+
+var ppidRegex = regexp.MustCompile(`PPid:\s*(\d+)`)
 
 type records []record
 
@@ -143,13 +151,9 @@ func PrintPortListen() {
 		ports := portsMap[k]
 		cmd := getCmdline(k)
 		sort.Sort(&ports)
-		println(fmt.Sprintf("%s#%d", cmd, k))
-		for i, port := range ports {
-			c := "├"
-			if i == len(ports)-1 {
-				c = "└"
-			}
-			println(fmt.Sprintf(" %s── %s", c, port.localAddress.text()))
+		println(cmd)
+		for _, port := range ports {
+			println(fmt.Sprintf("%s ─ %s%s", colorRed, port.localAddress.text(), colorReset))
 		}
 	}
 }
@@ -181,10 +185,65 @@ func getPidMapping() (mapping map[uint32]uint32) {
 }
 
 func getCmdline(pid uint32) string {
-	bytes, err := ioutil.ReadFile(fmt.Sprintf("/proc/%d/cmdline", pid))
-	if err != nil {
-		return ""
+	cmdlines := []cmdline{getCmdline0(pid)}
+	i := 0
+	for {
+		ppid := getPpid(pid)
+		if ppid <= 1 {
+			break
+		}
+		pcmdline := getCmdline0(ppid)
+		if pcmdline.text == "" {
+			break
+		}
+		cmdlines = append(cmdlines, pcmdline)
+		pid = ppid
+		i++
 	}
+	for i, j := 0, len(cmdlines)-1; i < j; i, j = i+1, j-1 {
+		cmdlines[i], cmdlines[j] = cmdlines[j], cmdlines[i]
+	}
+	cmdlineTexts := make([]string, len(cmdlines))
+	for i, cmdline := range cmdlines {
+		c := ""
+		if i > 0 {
+			c = "└─ "
+		}
+		cmdlineTexts[i] = fmt.Sprintf("%s%s%s%s%s%s#%d%s",
+			strings.Repeat("  ", i),
+			colorGreen, c, cmdline.text, colorReset,
+			colorYellow, cmdline.pid, colorReset)
+	}
+
+	return strings.Join(cmdlineTexts, "\n")
+}
+
+func getCmdline0(pid uint32) cmdline {
+	bytes, err := ioutil.ReadFile(fmt.Sprintf("/proc/%d/cmdline", pid))
+	var cmd string
+	if err == nil {
+		cmd = parseCmdlineString(bytes)
+	}
+	return cmdline{
+		pid:  pid,
+		text: cmd,
+	}
+}
+
+func getPpid(pid uint32) uint32 {
+	bytes, err := ioutil.ReadFile(fmt.Sprintf("/proc/%d/status", pid))
+	if err != nil {
+		return 0
+	}
+	find := ppidRegex.FindStringSubmatch(string(bytes))
+	if len(find) > 1 {
+		ppid, _ := strconv.ParseUint(find[1], 10, 32)
+		return uint32(ppid)
+	}
+	return 0
+}
+
+func parseCmdlineString(bytes []byte) string {
 	for i, b := range bytes {
 		if b == 0 {
 			bytes[i] = ' '
